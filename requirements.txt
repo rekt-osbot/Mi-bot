@@ -1,0 +1,19 @@
+# Core dependencies
+python-telegram-bot==20.5
+requests==2.31.0
+beautifulsoup4==4.12.2
+python-dotenv==1.0.0
+
+# For keep-alive server
+Flask==2.3.3
+
+# Utility libraries
+pytz==2023.3
+lxml==4.9.3
+html5lib==1.1
+validators==0.22.0
+
+# For parsing and text processing
+regex==2023.8.8
+nltk==3.8.1
+langdetect==1.0.9 
