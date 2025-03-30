@@ -124,13 +124,13 @@ def test_webhook():
     """
     Test endpoint to verify the webhook is working.
     """
+    global bot_app
     try:
         logger.info("Webhook test request received")
         
         # Check if bot is initialized
         if not bot_app:
             from src.marketbot.bot import setup_bot
-            global bot_app
             bot_app = setup_bot()
             
         # Create a test message
