@@ -10,6 +10,7 @@ from threading import Thread
 import logging
 import os
 import sys
+import asyncio
 
 # Set up logging for this module
 logging.basicConfig(level=logging.INFO)
@@ -49,6 +50,26 @@ def run():
     app.run(host='0.0.0.0', port=port)
     logger.info(f"Server running on port {port}")
 
+def run_async_bot():
+    """
+    Run the bot with proper asyncio setup.
+    This function is designed to be called in a separate thread.
+    """
+    try:
+        # Set up a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Import the main bot function
+        from marketbot.bot import main
+        
+        logger.info("Starting bot in background thread with asyncio event loop")
+        
+        # Run the bot
+        loop.run_until_complete(main())
+    except Exception as e:
+        logger.error(f"Error starting bot in thread: {e}")
+
 def keep_alive():
     """
     Start the keep-alive server.
@@ -66,20 +87,9 @@ def keep_alive():
     # This ensures the process stays alive as long as the server runs
     if is_render and 'PORT' in os.environ:
         logger.info(f"Running on Render. Starting web server on port {port} as main process")
-        # Import bot in a separate thread so it can run alongside the web server
-        from threading import Thread
         
-        def start_bot():
-            # Delay import to avoid circular imports
-            try:
-                from marketbot.bot import main
-                logger.info("Starting bot in background thread")
-                main()
-            except Exception as e:
-                logger.error(f"Error starting bot in thread: {e}")
-        
-        # Start bot in background thread
-        bot_thread = Thread(target=start_bot)
+        # Start bot in background thread with proper asyncio handling
+        bot_thread = Thread(target=run_async_bot)
         bot_thread.daemon = True
         bot_thread.start()
         

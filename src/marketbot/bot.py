@@ -35,7 +35,7 @@ DEFAULT_TIMEOUT = 60          # 60 seconds default timeout
 LONG_POLL_INTERVAL = 60.0     # 60 seconds for conserving resources
 LONG_TIMEOUT = 30             # 30 seconds timeout for conserving resources
 
-def main() -> None:
+async def main() -> None:
     """Initialize and start the bot."""
     # Verify token
     if not BOT_TOKEN:
@@ -102,7 +102,7 @@ def main() -> None:
         logger.info(f"Using standard polling interval ({poll_interval}s) for responsive usage")
     
     # Start the Bot with appropriate polling settings
-    application.run_polling(
+    await application.run_polling(
         allowed_updates=None,
         poll_interval=poll_interval,
         timeout=timeout,
@@ -113,4 +113,5 @@ def main() -> None:
     )
     
 if __name__ == "__main__":
-    main() 
+    import asyncio
+    asyncio.run(main()) 
