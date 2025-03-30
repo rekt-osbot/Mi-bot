@@ -9,6 +9,8 @@ import logging
 import sys
 import os
 import argparse
+import threading
+import traceback
 
 # Configure basic logging
 logging.basicConfig(
@@ -16,6 +18,15 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Thread exception handler
+def thread_exception_handler(args):
+    """Handler for unhandled exceptions in threads."""
+    logger.error(f"Unhandled exception in thread {args.thread.name}: {args.exc_value}")
+    logger.error("".join(traceback.format_tb(args.exc_traceback)))
+
+# Register the thread exception handler
+threading.excepthook = thread_exception_handler
 
 # Ensure the src directory is in the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
@@ -84,12 +95,18 @@ try:
         from marketbot.bot import main
         
         if __name__ == "__main__":
-            logger.info("Starting Market Intelligence Bot")
-            main()
+            logger.info("Starting Market Intelligence Bot in main thread")
+            
+            # Import asyncio here to avoid circular imports
+            import asyncio
+            
+            # Run the main function
+            asyncio.run(main())
 except ImportError as e:
     logger.error(f"Error importing bot package: {e}")
     logger.error("Make sure you have set up the package structure correctly")
     sys.exit(1)
 except Exception as e:
     logger.error(f"Error starting bot: {e}")
+    logger.error(traceback.format_exc())
     sys.exit(1) 

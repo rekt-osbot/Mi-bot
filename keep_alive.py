@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 import asyncio
+import signal
 
 # Set up logging for this module
 logging.basicConfig(level=logging.INFO)
@@ -59,6 +60,11 @@ def run_async_bot():
         # Set up a new event loop for this thread
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
+        # Disable signal handlers in this thread
+        # This prevents the set_wakeup_fd error in non-main threads
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, signal.SIG_IGN)
         
         # Import the main bot function
         from marketbot.bot import main

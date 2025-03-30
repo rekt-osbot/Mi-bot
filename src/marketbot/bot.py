@@ -4,6 +4,8 @@ Market Intelligence Bot main application.
 
 import logging
 import os
+import signal
+import asyncio
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, 
     MessageHandler, filters
@@ -41,6 +43,10 @@ async def main() -> None:
     if not BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN not provided in environment variables or .env file")
         return
+    
+    # Set up a custom exception handler for the event loop
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(custom_exception_handler)
     
     # Check if we should use long polling intervals (for free hosting)
     use_long_polling = os.environ.get("LONG_POLLING", "").lower() in ("true", "1", "yes")
@@ -101,16 +107,28 @@ async def main() -> None:
         timeout = DEFAULT_TIMEOUT
         logger.info(f"Using standard polling interval ({poll_interval}s) for responsive usage")
     
-    # Start the Bot with appropriate polling settings
-    await application.run_polling(
-        allowed_updates=None,
-        poll_interval=poll_interval,
-        timeout=timeout,
-        read_timeout=timeout,
-        write_timeout=timeout,
-        connect_timeout=timeout,
-        pool_timeout=timeout,
-    )
+    try:
+        # Start the Bot with appropriate polling settings
+        await application.run_polling(
+            allowed_updates=None,
+            poll_interval=poll_interval,
+            timeout=timeout,
+            read_timeout=timeout,
+            write_timeout=timeout,
+            connect_timeout=timeout,
+            pool_timeout=timeout,
+            # Disabling signals to avoid set_wakeup_fd issues in non-main threads
+            drop_pending_updates=True,
+        )
+    except Exception as e:
+        logger.error(f"Error in polling: {e}")
+        
+def custom_exception_handler(loop, context):
+    """Custom exception handler for the asyncio event loop."""
+    exception = context.get("exception")
+    logger.error(f"Caught exception in event loop: {context.get('message')}")
+    if exception:
+        logger.error(f"Exception details: {exception}")
     
 if __name__ == "__main__":
     import asyncio
