@@ -51,6 +51,9 @@ def parse_args():
 
 # Import and run the bot
 try:
+    # Check if we're running on Render or similar platform
+    is_production = 'RENDER' in os.environ or 'PORT' in os.environ
+    
     # Parse any command line arguments
     args = parse_args()
     
@@ -59,8 +62,8 @@ try:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Debug logging enabled")
     
-    # Start the keep-alive server if requested and available
-    if args.keep_alive and has_keep_alive:
+    # Start the keep-alive server if in production or explicitly requested
+    if (is_production or args.keep_alive) and has_keep_alive:
         logger.info("Starting keep-alive server...")
         keep_alive()
     
