@@ -37,21 +37,20 @@ DEFAULT_TIMEOUT = 60          # 60 seconds default timeout
 LONG_POLL_INTERVAL = 60.0     # 60 seconds for conserving resources
 LONG_TIMEOUT = 30             # 30 seconds timeout for conserving resources
 
-async def main() -> None:
-    """Initialize and start the bot."""
+def setup_bot():
+    """
+    Set up and configure the bot application.
+    This function is used for both polling and webhook modes.
+    
+    Returns:
+        Application: The configured bot application
+    """
     # Verify token
     if not BOT_TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN not provided in environment variables or .env file")
-        return
+        logger.error("BOT_TOKEN not provided in environment variables or .env file")
+        return None
     
-    # Set up a custom exception handler for the event loop
-    loop = asyncio.get_event_loop()
-    loop.set_exception_handler(custom_exception_handler)
-    
-    # Check if we should use long polling intervals (for free hosting)
-    use_long_polling = os.environ.get("LONG_POLLING", "").lower() in ("true", "1", "yes")
-    
-    # Create the Application with appropriate polling settings
+    # Create the Application
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Initialize bot data 
@@ -89,13 +88,29 @@ async def main() -> None:
     # Error handler
     application.add_error_handler(error_handler)
     
-    # Initialize and start the scheduler
+    # Initialize the scheduler
     scheduler = SchedulerService(application, TIME_ZONE, DAILY_UPDATE_TIME)
     scheduler.start_scheduler()
     
     # Log startup message
-    logger.info("Market Intelligence Bot started")
+    logger.info("Market Intelligence Bot configured")
     logger.info(f"Daily updates scheduled for {DAILY_UPDATE_TIME} {TIME_ZONE}")
+    
+    return application
+
+async def main() -> None:
+    """Initialize and start the bot in polling mode."""
+    # Set up a custom exception handler for the event loop
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(custom_exception_handler)
+    
+    # Check if we should use long polling intervals (for free hosting)
+    use_long_polling = os.environ.get("LONG_POLLING", "").lower() in ("true", "1", "yes")
+    
+    # Set up the bot
+    application = setup_bot()
+    if not application:
+        return
     
     # Determine polling settings based on configuration
     if use_long_polling:

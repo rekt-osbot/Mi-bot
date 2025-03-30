@@ -10,8 +10,6 @@ from threading import Thread
 import logging
 import os
 import sys
-import asyncio
-import signal
 import json
 
 # Set up logging for this module
@@ -20,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
+
+# Global reference to the bot application
+bot_app = None
 
 @app.route('/')
 def home():
@@ -45,23 +46,79 @@ def info():
     """
     return {
         "status": "online",
-        "web_only_mode": os.environ.get("WEB_ONLY_MODE", "False") == "True",
         "version": "1.0.0",
         "platform": "Render" if 'RENDER' in os.environ else "Unknown",
-        "time_zone": os.environ.get("TIME_ZONE", "UTC")
+        "time_zone": os.environ.get("TIME_ZONE", "UTC"),
+        "webhook_mode": True
     }
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
+@app.route('/telegram-webhook', methods=['POST'])
+def telegram_webhook():
     """
-    Simple webhook endpoint that can be used to interact with the bot.
+    Process incoming updates from Telegram.
+    This is the endpoint Telegram sends updates to when using webhook mode.
+    """
+    global bot_app
+    if not bot_app:
+        # Initialize the bot application if it's not already initialized
+        try:
+            from src.marketbot.bot import setup_bot
+            bot_app = setup_bot()
+            logger.info("Bot application initialized for webhook processing")
+        except Exception as e:
+            logger.error(f"Failed to initialize bot application: {e}")
+            return {"status": "error", "message": "Bot initialization failed"}, 500
+    
+    try:
+        # Get the update from Telegram
+        update_json = request.get_json()
+        logger.info(f"Received Telegram update: {update_json}")
+        
+        # Process the update using the bot application
+        if bot_app:
+            from telegram import Update
+            update = Update.de_json(update_json, bot_app.bot)
+            bot_app.process_update(update)
+            return {"status": "success"}, 200
+        else:
+            return {"status": "error", "message": "Bot not initialized"}, 500
+    except Exception as e:
+        logger.error(f"Error processing Telegram update: {e}")
+        return {"status": "error", "message": str(e)}, 500
+
+@app.route('/set-webhook', methods=['GET'])
+def set_webhook():
+    """
+    Set up the Telegram webhook with the correct URL.
     """
     try:
-        data = request.json
-        logger.info(f"Webhook received: {data}")
-        return {"status": "received", "message": "Webhook processed successfully"}, 200
+        # Get the webhook URL from query parameters or environment
+        webhook_url = request.args.get('url', os.environ.get('WEBHOOK_URL', ''))
+        token = request.args.get('token', os.environ.get('BOT_TOKEN', ''))
+        
+        if not webhook_url or not token:
+            return {"status": "error", "message": "Missing webhook URL or token"}, 400
+        
+        # Format the webhook URL if needed
+        if not webhook_url.endswith('/telegram-webhook'):
+            if not webhook_url.endswith('/'):
+                webhook_url += '/'
+            webhook_url += 'telegram-webhook'
+        
+        # Set up the webhook with Telegram
+        import requests
+        api_url = f"https://api.telegram.org/bot{token}/setWebhook"
+        response = requests.post(api_url, json={'url': webhook_url})
+        
+        # Check if the webhook was set successfully
+        if response.status_code == 200 and response.json().get('ok'):
+            logger.info(f"Webhook set successfully: {webhook_url}")
+            return {"status": "success", "webhook_url": webhook_url}, 200
+        else:
+            logger.error(f"Failed to set webhook: {response.text}")
+            return {"status": "error", "message": response.text}, 500
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
+        logger.error(f"Error setting webhook: {e}")
         return {"status": "error", "message": str(e)}, 500
 
 def run():
@@ -78,41 +135,23 @@ def run():
     app.run(host='0.0.0.0', port=port)
     logger.info(f"Server running on port {port}")
 
-def dummy_bot():
+def init_bot_for_webhooks():
     """
-    A dummy bot function that just logs status.
-    This is used when we can't run the actual bot due to threading issues.
-    """
-    logger.info("Running in dummy bot mode due to threading limitations on this platform")
-    while True:
-        try:
-            # Just sleep and stay alive
-            import time
-            time.sleep(60)
-            logger.info("Dummy bot is still running")
-        except Exception as e:
-            logger.error(f"Error in dummy bot: {e}")
-            time.sleep(60)
-
-def run_async_bot():
-    """
-    Run the bot with proper asyncio setup.
-    This function is designed to be called in a separate thread.
+    Initialize the bot in webhook mode.
     """
     try:
-        # We're avoiding using asyncio and signal handling altogether in the thread
-        # Instead, we'll just run a dummy bot that keeps the thread alive
-        # The real functionality will be provided by the web server
+        # Import the setup function from the bot module
+        from src.marketbot.bot import setup_bot
         
-        # Set an environment variable to indicate we're running in web-only mode
-        os.environ["WEB_ONLY_MODE"] = "True"
+        # Initialize the bot application
+        global bot_app
+        bot_app = setup_bot()
         
-        logger.info("Starting simplified bot in background thread (web server only mode)")
-        
-        # Run a simplified version that doesn't depend on asyncio or signals
-        dummy_bot()
+        logger.info("Bot initialized for webhook mode")
+        return True
     except Exception as e:
-        logger.error(f"Error starting bot in thread: {e}")
+        logger.error(f"Error initializing bot for webhooks: {e}")
+        return False
 
 def keep_alive():
     """
@@ -132,10 +171,8 @@ def keep_alive():
     if is_render and 'PORT' in os.environ:
         logger.info(f"Running on Render. Starting web server on port {port} as main process")
         
-        # Start bot in background thread with proper asyncio handling
-        bot_thread = Thread(target=run_async_bot)
-        bot_thread.daemon = True
-        bot_thread.start()
+        # Initialize the bot for webhook mode
+        init_bot_for_webhooks()
         
         # Start web server in main thread
         run()
