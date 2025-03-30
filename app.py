@@ -65,19 +65,27 @@ try:
     # Start the keep-alive server if in production or explicitly requested
     if (is_production or args.keep_alive) and has_keep_alive:
         logger.info("Starting keep-alive server...")
+        # In production environments, keep_alive() may not return if it runs the web server
+        # in the main thread (which is what we want for Render)
         keep_alive()
+        
+        # If we're still here, keep_alive() didn't take over the main thread,
+        # which means we're not in a production environment that requires it
     
     # Set environment variables for long polling if requested
-    if args.long_polling:
+    if args.long_polling or is_production:
         logger.info("Using long polling intervals to reduce API calls")
         os.environ["LONG_POLLING"] = "True"
     
-    # Import the main bot module
-    from marketbot.bot import main
-    
-    if __name__ == "__main__":
-        logger.info("Starting Market Intelligence Bot")
-        main()
+    # Only continue to start the bot if we're not in a production environment
+    # where keep_alive() has taken over the main thread
+    if not is_production or 'PORT' not in os.environ:
+        # Import the main bot module
+        from marketbot.bot import main
+        
+        if __name__ == "__main__":
+            logger.info("Starting Market Intelligence Bot")
+            main()
 except ImportError as e:
     logger.error(f"Error importing bot package: {e}")
     logger.error("Make sure you have set up the package structure correctly")

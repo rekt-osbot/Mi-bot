@@ -9,6 +9,7 @@ from flask import Flask
 from threading import Thread
 import logging
 import os
+import sys
 
 # Set up logging for this module
 logging.basicConfig(level=logging.INFO)
@@ -50,16 +51,44 @@ def run():
 
 def keep_alive():
     """
-    Start the keep-alive server in a separate thread.
-    This function should be called from the main bot script.
+    Start the keep-alive server.
+    
+    On platforms like Render, we run the web server directly.
+    On other platforms, we run it in a daemon thread.
     """
+    port = int(os.environ.get('PORT', 8080))
     logger.info("Starting keep-alive server")
     
-    # Create a daemon thread so it auto-closes when the main program exits
-    server_thread = Thread(target=run, daemon=True)
-    server_thread.start()
+    # Check if we're running on Render
+    is_render = 'RENDER' in os.environ
     
-    port = int(os.environ.get('PORT', 8080))
-    logger.info(f"Keep-alive server started on port {port}")
-    
-    return server_thread 
+    # If running on Render, execute the Flask server directly
+    # This ensures the process stays alive as long as the server runs
+    if is_render and 'PORT' in os.environ:
+        logger.info(f"Running on Render. Starting web server on port {port} as main process")
+        # Import bot in a separate thread so it can run alongside the web server
+        from threading import Thread
+        
+        def start_bot():
+            # Delay import to avoid circular imports
+            try:
+                from marketbot.bot import main
+                logger.info("Starting bot in background thread")
+                main()
+            except Exception as e:
+                logger.error(f"Error starting bot in thread: {e}")
+        
+        # Start bot in background thread
+        bot_thread = Thread(target=start_bot)
+        bot_thread.daemon = True
+        bot_thread.start()
+        
+        # Start web server in main thread
+        run()
+        sys.exit(0)  # Should never reach here on Render
+    else:
+        # For other environments, start the server in a daemon thread
+        logger.info(f"Starting web server on port {port} in background thread")
+        server_thread = Thread(target=run, daemon=True)
+        server_thread.start()
+        return server_thread 
